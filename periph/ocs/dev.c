@@ -9,6 +9,7 @@
 #include "ocs/dev.h"
 #include "ocs/sks.h"
 #include "ocs/aes.h"
+#include "ocs/gp.h"
 
 static int ocs_cfg_read( pci_func *func, uint64_t addr,       void *out, int count )
 {
@@ -137,8 +138,17 @@ static int ocs_mem_write( pci_func *func, uint64_t addr, const void *buf, int co
         case 0x8000:
             s = aes_write( &i->aes, addr, buf, count );
             break;
+        case 0xA000:
+            s = aes_write( &i->aes2, addr, buf, count );
+            break;
         case 0xB000:
             s = hash_write( &i->hash, addr, buf, count );
+            break;
+        case 0xD000:
+            s = gp_write( &i->gp, addr, buf, count );
+            break;
+        case 0xE000:
+            s = rsa_write( &i->rsa, addr, buf, count );
             break;
         case 0xF000:
             s = sks_write( &i->sks, addr, buf, count );
@@ -207,8 +217,17 @@ static int ocs_mem_read( pci_func *func, uint64_t addr,       void *buf, int cou
         case 0x8000:
             s = aes_read( &i->aes, addr, buf, count );
             break;
+        case 0xA000:
+            s = aes_read( &i->aes2, addr, buf, count );
+            break;
         case 0xB000:
             s = hash_read( &i->hash, addr, buf, count );
+            break;
+        case 0xD000:
+            s = gp_read( &i->gp, addr, buf, count );
+            break;
+        case 0xE000:
+            s = rsa_read( &i->rsa, addr, buf, count );
             break;
         case 0xF000:
             s = sks_read( &i->sks, addr, buf, count );
@@ -221,11 +240,11 @@ static int ocs_mem_read( pci_func *func, uint64_t addr,       void *buf, int cou
                  "( BAR %i, Offset: 0x%03x, Size: 0x%x )",
                  bar, off, count);
 
-            return 0;
+            return -2;
     }
 
     if (!s)
-        return 0;
+        return -2;
     return i->sai;
 }
 
@@ -234,7 +253,7 @@ static int ocs_dma_read( ocs_inst *i, uint32_t addr, void *buffer, size_t count 
 }
 
 static int ocs_dma_write( ocs_inst *i, uint32_t addr, void *buffer, size_t count ) {
-    return pci_bus_mem_read( i->func.bus, addr, buffer, count, i->sai, 15 );
+    return pci_bus_mem_write( i->func.bus, addr, buffer, count, i->sai, 15 );
 }
 
 static device_instance * ocs_spawn(const cfg_file *file, const cfg_section *section) {
@@ -291,6 +310,10 @@ static device_instance * ocs_spawn(const cfg_file *file, const cfg_section *sect
     sks_init( &i->self, &i->sks );
     hash_init( &i->self, &i->hash );
     aes_init( &i->self, &i->aes, 'a' );
+    aes_init( &i->self, &i->aes2, 'b' );
+    gp_init( &i->self, &i->gp );
+    rsa_init( &i->self, &i->rsa );
+
     i->sks.hash = &i->hash;
     i->sks.hash_get_result = hash_get_result;
     i->sks.hash_load_key = hash_load_key;
@@ -302,6 +325,12 @@ static device_instance * ocs_spawn(const cfg_file *file, const cfg_section *sect
     i->aes.aes_gpdma.bus_impl = i;
     i->aes.aes_gpdma.bus_read = ocs_dma_read;
     i->aes.aes_gpdma.bus_write = ocs_dma_write;
+    i->aes2.aes_gpdma.bus_impl = i;
+    i->aes2.aes_gpdma.bus_read = ocs_dma_read;
+    i->aes2.aes_gpdma.bus_write = ocs_dma_write;
+    i->gp.gp_gpdma.bus_impl = i;
+    i->gp.gp_gpdma.bus_read = ocs_dma_read;
+    i->gp.gp_gpdma.bus_write = ocs_dma_write;
 
     return &i->self;
 }

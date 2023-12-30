@@ -180,11 +180,13 @@ static int att_mem_read( pci_func *func, uint64_t addr,       void *buf, int cou
 
 }
 
+void att_prim_ret_init( att_inst *i );
 
 device_instance * att_spawn(const cfg_file *file, const cfg_section *section) {
     int j;
     const char *name;
     char vn[40];
+    uint32_t endpt, type, bar, rs, func;
     uint64_t ext;
     att_inst *i = malloc( sizeof(att_inst) );
 
@@ -194,12 +196,12 @@ device_instance * att_spawn(const cfg_file *file, const cfg_section *section) {
     }
     memset( i, 0, sizeof(att_inst) );
 
-    i->self.impl = i;
-    i->self.name = section->name;
-    i->func.device = &i->self;
+    i->self.impl      = i;
+    i->self.name      = section->name;
+    i->func.device    = &i->self;
     i->func.mem_read  = att_mem_read;
     i->func.mem_write = att_mem_write;
-    i->func.cfg_read = att_cfg_read;
+    i->func.cfg_read  = att_cfg_read;
     i->func.cfg_write = att_cfg_write;
 
     pci_cfg_handle_type0 ( &i->func, section, 0 );
@@ -225,7 +227,38 @@ device_instance * att_spawn(const cfg_file *file, const cfg_section *section) {
         cfg_find_int32( section, vn, &i->regs.WIN[j].CONTROL );
     }
 
+    for ( j = 0; j < 128; j++ ) {
+        snprintf( vn, 40, "att_sbwin_%i_base", j);
+        cfg_find_int32( section, vn, &i->regs.SB_WIN[j].window_base );
+        snprintf( vn, 40, "att_sbwin_%i_size", j);
+        cfg_find_int32( section, vn, &i->regs.SB_WIN[j].window_size );
+        func = 0;
+        rs = 0;
+        bar = 0;
+        type = 6;
+        snprintf( vn, 40, "att_sbwin_%i_endpt", j);
+        cfg_find_int32( section, vn, &endpt );
+        snprintf( vn, 40, "att_sbwin_%i_type", j);
+        cfg_find_int32( section, vn, &type );
+        snprintf( vn, 40, "att_sbwin_%i_bar", j);
+        cfg_find_int32( section, vn, &bar );
+        snprintf( vn, 40, "att_sbwin_%i_rootspace", j);
+        cfg_find_int32( section, vn, &rs );
+        snprintf( vn, 40, "att_sbwin_%i_func", j);
+        cfg_find_int32( section, vn, &func );
+        i->regs.SB_WIN[j].sb_address  = endpt & 0xffu;
+        i->regs.SB_WIN[j].sb_address |= (type << 8u) & 0x00ff00u;
+        i->regs.SB_WIN[j].sb_address |= ((type + 1) << 16u) & 0xff0000u;
+        i->regs.SB_WIN[j].sb_address |= (bar << 24u) & 0x0f000000u;
+        i->regs.SB_WIN[j].reg_1C  = func & 0xffu;
+        i->regs.SB_WIN[j].reg_1C |= (rs << 8u) & 0x000300u;
+        snprintf( vn, 40, "att_sbwin_%i_control", j);
+        cfg_find_int32( section, vn, &i->regs.SB_WIN[j].window_flags );
+    }
+
     device_register( &i->self );
+
+    att_prim_ret_init( i );
 
     return &i->self;
 }
